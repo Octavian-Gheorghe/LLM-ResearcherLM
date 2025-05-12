@@ -130,7 +130,7 @@ import numpy as np
 from langchain_elasticsearch import ElasticsearchStore
 from langchain_openai import AzureChatOpenAI
 from langchain_community.chat_models import ChatOpenAI
-from langchain.schema import AIMessage, HumanMessage
+from langchain.schema import AIMessage, HumanMessage, Document
 from elasticsearch import Elasticsearch
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -183,11 +183,21 @@ class ChatBot:
             [
                 ("system", self.combined_system_prompt),
                 MessagesPlaceholder("chat_history", optional=True),
+                MessagesPlaceholder("rules", optional=True),
                 ("human", "{question}"),
             ]
         )
 
+        self.rules_prompt = Global.config["CHAT_RULES_PROMPT"]
+        self.combined_rules_prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", self.rules_prompt),
+                MessagesPlaceholder("chat_history"),
+            ]
+        )
+
         self.combined_chain = self.combined_prompt | self.llm | StrOutputParser()
+        self.combined_rules_chain = self.combined_rules_prompt | self.llm | StrOutputParser()
 
     def format_docs(self, docs):
         """Format documents."""
@@ -207,15 +217,22 @@ class ChatBot:
         combined_output = self.combined_chain.invoke({
             'chat_history': formatted_chat_history,
             'question': new_question,
-            'context': formatted_context
+            'context': formatted_context,
+            'rules': self.combined_rules_chain.invoke({
+                'chat_history': formatted_chat_history
+            })
         })
 
         self._log = Global.get_logger(__name__)
         self._log.info('Response generated')
 
-        print(combined_output)
+        self._log.info(combined_output)
 
         output = refine_answer(new_question, combined_output, self.llm)
+
+        qa_text = f"Q: {new_question}\nA: {output}"
+        new_doc = Document(page_content=qa_text)
+        self.vectorstore.add_documents([new_doc])
 
         return output
     
