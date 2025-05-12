@@ -138,6 +138,7 @@ from langchain_core.output_parsers import StrOutputParser
 import gradio as gr
 from langchain_community.vectorstores import Chroma
 from ingestion.globals import Global
+from constitutional_ai import refine_answer
 
 
 class ChatBot:
@@ -156,7 +157,8 @@ class ChatBot:
         self.llm = ChatOpenAI(
             base_url="http://localhost:1234/v1",  # LM Studio default local URL
             api_key="lm-studio",  # Dummy key, LM Studio usually doesn't validate it
-            model="nous-hermes-2-mistral-7b-dpo",  # e.g., "gpt-3.5-turbo", "mistral", etc.
+            #model="llama-3.2-3b-instruct",  # e.g., "gpt-3.5-turbo", "mistral", etc.
+            model= "gemma-2-2b-it"
         )
 
         self.all_embeddings = []
@@ -211,7 +213,11 @@ class ChatBot:
         self._log = Global.get_logger(__name__)
         self._log.info('Response generated')
 
-        return combined_output
+        print(combined_output)
+
+        output = refine_answer(new_question, combined_output, self.llm)
+
+        return output
     
 
     def format_chat_history(self, history):
